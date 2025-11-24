@@ -93,9 +93,9 @@ if api_healthy:
     if api_status.get('model_loaded'):
         st.sidebar.success("✅ Modelo Cargado")
     else:
-        st.sidebar.error("❌ Modelo No Cargado")
+        st.sidebar.error(" Modelo No Cargado")
 else:
-    st.sidebar.error("❌ API No Disponible")
+    st.sidebar.error("API No Disponible")
     st.sidebar.error(f"Error: {api_status.get('error', 'Desconocido')}")
 
 # Página de Inicio
@@ -103,14 +103,7 @@ if app_mode == "🏠 Inicio":
     st.header("Bienvenido al Sistema de Clasificación de Salud")
     
     if not api_healthy:
-        st.error("""
-        ⚠️ **La API no está disponible**
-        
-        Para usar la aplicación, asegúrese de:
-        1. Tener la API ejecutándose en la URL especificada
-        2. Verificar que el puerto 5000 esté disponible
-        3. Que el modelo esté correctamente cargado
-        """)
+        st.error("""**La API no está disponible**""")
     
     # Resumen del sistema
     st.subheader("📊 Resumen del Sistema")
