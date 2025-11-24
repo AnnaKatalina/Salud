@@ -8,6 +8,9 @@ import seaborn as sns
 from datetime import datetime
 import time
 import io
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Configuración de la página
 st.set_page_config(
@@ -17,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS personalizados
+# Estilos CSS personalizados mejorados
 st.markdown("""
 <style>
     .main-header {
@@ -25,24 +28,42 @@ st.markdown("""
         color: #1f77b4;
         text-align: center;
         margin-bottom: 2rem;
+        font-weight: bold;
     }
     .metric-card {
-        background-color: #f0f2f6;
-        padding: 1rem;
+        background-color: #f8f9fa;
+        padding: 1.5rem;
         border-radius: 10px;
-        border-left: 4px solid #1f77b4;
+        border-left: 5px solid #1f77b4;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .prediction-high {
         background-color: #ffebee;
-        padding: 1rem;
+        padding: 1.5rem;
         border-radius: 10px;
-        border-left: 4px solid #f44336;
+        border-left: 5px solid #f44336;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .prediction-low {
         background-color: #e8f5e8;
-        padding: 1rem;
+        padding: 1.5rem;
         border-radius: 10px;
-        border-left: 4px solid #4caf50;
+        border-left: 5px solid #4caf50;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .feature-importance {
+        background-color: #fff3e0;
+        padding: 1rem;
+        border-radius: 8px;
+        margin: 0.5rem 0;
+    }
+    .api-status-connected {
+        color: #4caf50;
+        font-weight: bold;
+    }
+    .api-status-disconnected {
+        color: #f44336;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -55,7 +76,7 @@ st.markdown("---")
 st.sidebar.title("Navegación")
 app_mode = st.sidebar.selectbox(
     "Seleccione una opción:",
-    ["🏠 Inicio", "📊 Análisis Exploratorio", "🔮 Predicción Individual", "📁 Predicción por Lotes", "📈 Resultados", "ℹ️ Acerca del Modelo"]
+    ["🏠 Inicio", "📊 Análisis Exploratorio", "🔮 Predicción Individual", "📁 Predicción por Lotes", "📈 Resultados", "🔍 Análisis del Modelo", "ℹ️ Acerca del Modelo"]
 )
 
 # URL base de la API
@@ -87,23 +108,43 @@ def check_api_health():
 # Verificar estado de la API
 api_healthy, api_status, response_time = check_api_health()
 
-if api_healthy:
-    st.sidebar.success("✅ API Conectada")
-    st.sidebar.metric("Tiempo Respuesta", f"{response_time:.0f} ms")
-    if api_status.get('model_loaded'):
-        st.sidebar.success("✅ Modelo Cargado")
+# Mostrar estado en sidebar
+status_col1, status_col2 = st.sidebar.columns([1, 2])
+with status_col1:
+    if api_healthy:
+        st.success("✅")
     else:
-        st.sidebar.error("Modelo No Cargado")
-else:
-    st.sidebar.error("API No Disponible")
-    st.sidebar.error(f"Error: {api_status.get('error', 'Desconocido')}")
+        st.error("❌")
+with status_col2:
+    if api_healthy:
+        st.markdown('<span class="api-status-connected">API Conectada</span>', unsafe_allow_html=True)
+        st.metric("Tiempo Respuesta", f"{response_time:.0f} ms")
+        if api_status.get('model_loaded'):
+            st.success("✅ Modelo Cargado")
+        else:
+            st.error("❌ Modelo No Cargado")
+    else:
+        st.markdown('<span class="api-status-disconnected">API No Disponible</span>', unsafe_allow_html=True)
+        st.error(f"Error: {api_status.get('error', 'Desconocido')}")
 
 # Página de Inicio
 if app_mode == "🏠 Inicio":
     st.header("Bienvenido al Sistema de Clasificación de Salud")
     
     if not api_healthy:
-        st.error("**La API no está disponible**")
+        st.error("""
+        ⚠️ **La API no está disponible**
+        
+        Para usar la aplicación, asegúrese de:
+        1. Tener la API ejecutándose en la URL especificada
+        2. Verificar que el puerto 5000 esté disponible
+        3. Que el modelo esté correctamente cargado
+        
+        **Solución rápida:** Ejecute el siguiente comando en su terminal:
+        ```bash
+        python api_flask.py
+        ```
+        """)
     
     # Resumen del sistema
     st.subheader("📊 Resumen del Sistema")
@@ -131,6 +172,17 @@ if app_mode == "🏠 Inicio":
         endpoint_count = len(api_status.get('endpoints', {})) if api_healthy else 0
         st.metric("Endpoints", endpoint_count)
         st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Información sobre los datos y modelo
+    st.subheader("🎯 Objetivo del Modelo")
+    
+    st.info("""
+    **Este sistema utiliza modelos de Machine Learning para:**
+    - 🔍 **Clasificar** afiliados entre régimen contributivo y subsidiado
+    - 📈 **Predecir** riesgo basado en características demográficas
+    - 🎯 **Optimizar** la asignación de recursos en salud
+    - 📊 **Analizar** patrones en los datos del sistema de salud
+    """)
     
     # Información sobre los datos
     st.subheader("📋 Bases de Datos Utilizadas")
@@ -173,25 +225,25 @@ if app_mode == "🏠 Inicio":
     with guide_col1:
         st.markdown("""
         **🔮 Predicción Individual**
-        - Complete el formulario
-        - Obtenga resultados inmediatos
-        - Vea el nivel de confianza
+        - Complete el formulario interactivo
+        - Obtenga resultados en tiempo real
+        - Vea probabilidades y explicaciones
         """)
     
     with guide_col2:
         st.markdown("""
         **📁 Predicción por Lotes**
-        - Suba archivo CSV
-        - Procese múltiples registros
-        - Descargue resultados
+        - Suba archivo CSV con múltiples registros
+        - Procesamiento eficiente en lote
+        - Descargue resultados completos
         """)
     
     with guide_col3:
         st.markdown("""
-        **📈 Análisis de Resultados**
+        **📈 Análisis Avanzado**
         - Visualice distribuciones
-        - Analice por características
-        - Exporte reportes
+        - Analice importancia de características
+        - Exporte reportes ejecutivos
         """)
 
 # Página de Análisis Exploratorio
@@ -207,39 +259,44 @@ elif app_mode == "📊 Análisis Exploratorio":
     
     if analysis_type == "Datos de Ejemplo":
         if st.button("🎲 Generar Datos de Ejemplo", type="primary"):
-            with st.spinner("Generando datos de ejemplo..."):
-                # Simular datos más realistas basados en la estructura del notebook
+            with st.spinner("Generando datos de ejemplo basados en la estructura real..."):
+                # Simular datos realistas basados en el notebook
                 np.random.seed(42)
                 n_samples = 2000
                 
                 # Crear datos balanceados entre contributivo y subsidiado
-                regimen_choices = ['Contributivo', 'Subsidiado']
-                regimen_probs = [0.4, 0.6]  # Más subsidiado como en los datos reales
-                
                 sample_data = pd.DataFrame({
                     'Genero': np.random.choice(['Masculino', 'Femenino'], n_samples, p=[0.48, 0.52]),
                     'Grupo_etario': np.random.choice([
-                        '15 a 19', '19 a 45', '45 a 50', '50 a 55', 
-                        '55 a 60', '60 a 65', '65 a 70', '70 a 75', '> 75'
-                    ], n_samples, p=[0.1, 0.25, 0.15, 0.12, 0.1, 0.08, 0.07, 0.06, 0.07]),
-                    'Régimen': np.random.choice(regimen_choices, n_samples, p=regimen_probs),
+                        '< 1', '1 a 5', '5 a 15', '15 a 19', '19 a 45',
+                        '45 a 50', '50 a 55', '55 a 60', '60 a 65',
+                        '65 a 70', '70 a 75', '> 75'
+                    ], n_samples, p=[0.02, 0.05, 0.08, 0.1, 0.25, 0.15, 0.12, 0.08, 0.06, 0.05, 0.03, 0.01]),
+                    'Régimen': np.random.choice(['Contributivo', 'Subsidiado'], n_samples, p=[0.4, 0.6]),
                     'Tipo_afiliado': np.random.choice([
-                        'COTIZANTE', 'BENEFICIARIO', 'CABEZA DE FAMILIA', 'ADICIONAL'
-                    ], n_samples, p=[0.4, 0.35, 0.2, 0.05]),
+                        'COTIZANTE', 'BENEFICIARIO', 'CABEZA DE FAMILIA'
+                    ], n_samples, p=[0.4, 0.4, 0.2]),
                     'Departamento': np.random.choice([
                         'BOGOTA D.C.', 'ANTIOQUIA', 'VALLE', 'CUNDINAMARCA', 
-                        'ATLANTICO', 'SANTANDER', 'BOLIVAR', 'NARIÑO'
+                        'ATLANTICO', 'SANTANDER', 'BOLIVAR', 'NARIÑO', 'BOYACA'
+                    ], n_samples, p=[0.2, 0.15, 0.12, 0.1, 0.08, 0.08, 0.07, 0.1, 0.1]),
+                    'Municipio': np.random.choice([
+                        'BOGOTA', 'MEDELLIN', 'CALI', 'BARRANQUILLA',
+                        'CARTAGENA', 'BUCARAMANGA', 'CUCUTA', 'VILLAVICENCIO'
                     ], n_samples),
                     'Zona': np.random.choice([
                         'Urbana', 'Rural', 'Urbana-Cabecera Municipal'
-                    ], n_samples, p=[0.6, 0.25, 0.15]),
+                    ], n_samples, p=[0.7, 0.2, 0.1]),
                     'Nivel_Sisben': np.random.choice([
                         '1', '2', '3', '4', 'NO APLICA'
-                    ], n_samples, p=[0.3, 0.25, 0.2, 0.15, 0.1])
+                    ], n_samples, p=[0.4, 0.3, 0.15, 0.1, 0.05]),
+                    'Estado_afiliado': np.random.choice([
+                        'Activo', 'Inactivo', 'Protección Laboral C'
+                    ], n_samples, p=[0.85, 0.1, 0.05])
                 })
                 
                 st.session_state.sample_data = sample_data
-                st.success(f"✅ Se generaron {n_samples} registros de ejemplo!")
+                st.success(f"✅ Se generaron {n_samples} registros de ejemplo realistas!")
     
     else:  # Subir Datos Propios
         uploaded_file = st.file_uploader("📤 Subir archivo CSV", type="csv")
@@ -248,6 +305,7 @@ elif app_mode == "📊 Análisis Exploratorio":
                 sample_data = pd.read_csv(uploaded_file)
                 st.session_state.sample_data = sample_data
                 st.success(f"✅ Archivo cargado: {uploaded_file.name}")
+                st.info(f"📊 Dimensiones: {sample_data.shape[0]} filas × {sample_data.shape[1]} columnas")
             except Exception as e:
                 st.error(f"❌ Error al cargar el archivo: {str(e)}")
     
@@ -257,7 +315,19 @@ elif app_mode == "📊 Análisis Exploratorio":
         
         # Mostrar datos
         st.subheader("📋 Vista Previa de Datos")
-        st.dataframe(data.head(10), use_container_width=True)
+        
+        # Filtros interactivos
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            show_rows = st.slider("Filas a mostrar", 5, 100, 10)
+        with col2:
+            selected_columns = st.multiselect(
+                "Columnas a mostrar",
+                data.columns.tolist(),
+                default=data.columns.tolist()[:min(8, len(data.columns))]
+            )
+        
+        st.dataframe(data[selected_columns].head(show_rows), use_container_width=True)
         
         # Estadísticas básicas
         st.subheader("📊 Estadísticas Descriptivas")
@@ -266,74 +336,113 @@ elif app_mode == "📊 Análisis Exploratorio":
         
         with col1:
             st.write("**Información General**")
-            st.write(f"Registros totales: {len(data):,}")
-            st.write(f"Variables: {len(data.columns)}")
-            st.write(f"Memoria usada: {data.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-        
-        with col2:
-            st.write("**Tipos de Datos**")
+            st.write(f"📈 Registros totales: {len(data):,}")
+            st.write(f"📊 Variables: {len(data.columns)}")
+            st.write(f"💾 Memoria usada: {data.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
+            st.write(f"🔍 Valores nulos: {data.isnull().sum().sum()}")
+            
+            # Tipos de datos
+            st.write("**📝 Tipos de Datos**")
             dtype_counts = data.dtypes.value_counts()
             for dtype, count in dtype_counts.items():
-                st.write(f"- {dtype}: {count}")
+                st.write(f"- {dtype}: {count} columnas")
         
-        # Visualizaciones
-        st.subheader("📈 Visualizaciones")
+        with col2:
+            st.write("**🔢 Resumen Numérico**")
+            numeric_cols = data.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) > 0:
+                st.write(data[numeric_cols].describe())
+            else:
+                st.info("No hay columnas numéricas en los datos")
+        
+        # Visualizaciones interactivas
+        st.subheader("📈 Visualizaciones Interactivas")
         
         # Seleccionar variables para visualizar
         available_columns = data.select_dtypes(include=['object']).columns.tolist()
         
         if available_columns:
-            viz_col1, viz_col2 = st.columns(2)
+            viz_col1, viz_col2 = st.columns([1, 2])
             
             with viz_col1:
                 chart_type = st.selectbox(
                     "Tipo de gráfico:",
-                    ["Barras", "Torta", "Conteo"]
+                    ["Barras", "Torta", "Histograma", "Boxplot", "Dispersión"]
                 )
                 
                 x_axis = st.selectbox(
-                    "Variable para análisis:",
+                    "Variable X:",
                     available_columns
+                )
+                
+                # Opciones adicionales según el tipo de gráfico
+                if chart_type in ["Dispersión", "Boxplot"] and len(available_columns) > 1:
+                    y_axis = st.selectbox(
+                        "Variable Y:",
+                        [col for col in available_columns if col != x_axis]
+                    )
+                else:
+                    y_axis = None
+                
+                color_by = st.selectbox(
+                    "Color por (opcional):",
+                    ["Ninguno"] + available_columns
                 )
             
             with viz_col2:
                 if chart_type == "Barras":
-                    fig, ax = plt.subplots(figsize=(10, 6))
-                    data[x_axis].value_counts().plot(kind='bar', ax=ax, color='skyblue')
-                    ax.set_title(f'Distribución de {x_axis}')
-                    ax.set_ylabel('Frecuencia')
-                    plt.xticks(rotation=45)
-                    st.pyplot(fig)
+                    fig = px.bar(data, x=x_axis, title=f'Distribución de {x_axis}')
+                    st.plotly_chart(fig, use_container_width=True)
                 
                 elif chart_type == "Torta":
-                    fig, ax = plt.subplots(figsize=(8, 8))
                     counts = data[x_axis].value_counts()
-                    ax.pie(counts.values, labels=counts.index, autopct='%1.1f%%', startangle=90)
-                    ax.set_title(f'Distribución de {x_axis}')
-                    st.pyplot(fig)
+                    fig = px.pie(values=counts.values, names=counts.index, 
+                                title=f'Distribución de {x_axis}')
+                    st.plotly_chart(fig, use_container_width=True)
                 
-                else:  # Conteo
+                elif chart_type == "Histograma" and x_axis in data.select_dtypes(include=[np.number]).columns:
+                    fig = px.histogram(data, x=x_axis, title=f'Histograma de {x_axis}')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                elif chart_type == "Boxplot" and y_axis:
+                    fig = px.box(data, x=x_axis, y=y_axis, title=f'Boxplot: {x_axis} vs {y_axis}')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                elif chart_type == "Dispersión" and y_axis:
+                    color_param = None if color_by == "Ninguno" else color_by
+                    fig = px.scatter(data, x=x_axis, y=y_axis, color=color_param,
+                                   title=f'Dispersión: {x_axis} vs {y_axis}')
+                    st.plotly_chart(fig, use_container_width=True)
+                
+                else:
                     st.write(f"**Distribución de {x_axis}:**")
                     counts = data[x_axis].value_counts()
                     st.dataframe(counts)
             
-            # Análisis cruzado
+            # Análisis cruzado avanzado
             if len(available_columns) > 1:
-                st.subheader("🔍 Análisis Cruzado")
+                st.subheader("🔍 Análisis Cruzado Avanzado")
                 
-                col_x = st.selectbox("Variable X:", available_columns, key='x_var')
-                col_y = st.selectbox("Variable Y:", available_columns, key='y_var')
+                col_x = st.selectbox("Variable para filas:", available_columns, key='x_var_cross')
+                col_y = st.selectbox("Variable para columnas:", available_columns, key='y_var_cross')
                 
                 if col_x != col_y:
+                    # Tabla de contingencia
                     crosstab = pd.crosstab(data[col_x], data[col_y], normalize='index') * 100
                     
-                    fig, ax = plt.subplots(figsize=(12, 8))
-                    crosstab.plot(kind='bar', ax=ax, stacked=True)
-                    ax.set_title(f'Relación entre {col_x} y {col_y}')
-                    ax.set_ylabel('Porcentaje (%)')
-                    plt.xticks(rotation=45)
-                    plt.legend(title=col_y, bbox_to_anchor=(1.05, 1), loc='upper left')
-                    st.pyplot(fig)
+                    # Heatmap interactivo
+                    fig = px.imshow(crosstab, 
+                                  labels=dict(x=col_y, y=col_x, color="Porcentaje"),
+                                  x=crosstab.columns,
+                                  y=crosstab.index,
+                                  title=f'Relación entre {col_x} y {col_y}',
+                                  aspect="auto")
+                    fig.update_xaxes(side="bottom")
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Mostrar tabla numérica
+                    with st.expander("📋 Ver tabla numérica detallada"):
+                        st.dataframe(crosstab.style.background_gradient(cmap='Blues'))
 
 # Página de Predicción Individual
 elif app_mode == "🔮 Predicción Individual":
@@ -348,6 +457,8 @@ elif app_mode == "🔮 Predicción Individual":
         1. Que la API esté ejecutándose en: {API_BASE_URL}
         2. Que el modelo esté cargado
         3. La conexión de red
+        
+        **Solución:** Ejecute `python api_flask.py` en su terminal
         """)
         st.stop()
     
@@ -355,9 +466,10 @@ elif app_mode == "🔮 Predicción Individual":
     with st.form("prediction_form"):
         st.subheader("📝 Ingrese los datos para la predicción")
         
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         
         with col1:
+            st.markdown("**👤 Información Personal**")
             genero = st.selectbox("Género *", ["Masculino", "Femenino"])
             grupo_etario = st.selectbox("Grupo Etario *", [
                 "< 1", "1 a 5", "5 a 15", "15 a 19", "19 a 45",
@@ -370,6 +482,7 @@ elif app_mode == "🔮 Predicción Individual":
             ])
         
         with col2:
+            st.markdown("**📍 Información Geográfica**")
             departamento = st.selectbox("Departamento *", [
                 "BOGOTA D.C.", "ANTIOQUIA", "VALLE", "CUNDINAMARCA",
                 "ATLANTICO", "SANTANDER", "BOLIVAR", "NARIÑO",
@@ -381,12 +494,21 @@ elif app_mode == "🔮 Predicción Individual":
                 "Rural - Dispersal", "Rural - Resto Rural",
                 "Urbana - Centro Poblado"
             ])
+        
+        with col3:
+            st.markdown("**📊 Información de Salud**")
             nivel_sisben = st.selectbox("Nivel Sisbén *", [
                 "1", "2", "3", "4", "NO APLICA", "POBLACIÓN CON SISBEN",
                 "VÍCTIMAS DEL CONFLICTO ARMADO INTERNO", "MIGRACION"
             ])
+            estado_afiliado = st.selectbox("Estado del Afiliado", [
+                "Activo", "Inactivo", "Protección Laboral C", "NO APLICA"
+            ])
+            condicion_beneficiario = st.selectbox("Condición del Beneficiario", [
+                "NO APLICA", "ESTUDIANTE", "PENSIONADO", "DISCAPACITADO"
+            ])
         
-        st.markdown("**Campos obligatorios ***")
+        st.markdown("**📌 Campos obligatorios ***")
         submitted = st.form_submit_button("🎯 Realizar Predicción", type="primary")
         
         if submitted:
@@ -404,7 +526,9 @@ elif app_mode == "🔮 Predicción Individual":
                 "Departamento": departamento,
                 "Municipio": municipio,
                 "Zona": zona,
-                "Nivel_Sisben": nivel_sisben
+                "Nivel_Sisben": nivel_sisben,
+                "Estado_afiliado": estado_afiliado,
+                "Condicion_beneficiario": condicion_beneficiario
             }
             
             # Realizar predicción
@@ -425,7 +549,7 @@ elif app_mode == "🔮 Predicción Individual":
                         st.success(f"✅ Predicción completada en {response_time:.0f}ms")
                         
                         # Layout de resultados
-                        res_col1, res_col2 = st.columns(2)
+                        res_col1, res_col2 = st.columns([2, 1])
                         
                         with res_col1:
                             st.subheader("🎯 Resultado de la Predicción")
@@ -435,48 +559,68 @@ elif app_mode == "🔮 Predicción Individual":
                             if prediction is not None:
                                 if prediction == 1:
                                     st.markdown('<div class="prediction-high">', unsafe_allow_html=True)
-                                    st.error("🔴 **CLASIFICACIÓN: ALTO RIESGO**")
-                                    st.write("Este caso requiere atención prioritaria y seguimiento cercano.")
+                                    st.error("🔴 **CLASIFICACIÓN: RÉGIMEN SUBSIDIADO**")
+                                    st.write("""
+                                    **Interpretación:** Este caso presenta características que lo clasifican en el régimen subsidiado.
+                                    
+                                    **Recomendaciones:**
+                                    - Verificar elegibilidad para programas sociales
+                                    - Revisar documentación de Sisbén
+                                    - Evaluar necesidades específicas de salud
+                                    """)
                                     st.markdown('</div>', unsafe_allow_html=True)
                                 else:
                                     st.markdown('<div class="prediction-low">', unsafe_allow_html=True)
-                                    st.success("🟢 **CLASIFICACIÓN: BAJO RIESGO**")
-                                    st.write("Este caso se encuentra dentro de los parámetros normales.")
+                                    st.success("🟢 **CLASIFICACIÓN: RÉGIMEN CONTRIBUTIVO**")
+                                    st.write("""
+                                    **Interpretación:** Este caso presenta características que lo clasifican en el régimen contributivo.
+                                    
+                                    **Características típicas:**
+                                    - Afiliación mediante cotizaciones
+                                    - Capacidad de pago demostrada
+                                    - Situación laboral formal
+                                    """)
                                     st.markdown('</div>', unsafe_allow_html=True)
                                 
                                 # Mostrar probabilidades si están disponibles
                                 if 'probabilities' in result:
                                     probs = result['probabilities'][0]
-                                    prob_low = probs[0] * 100
-                                    prob_high = probs[1] * 100
+                                    prob_contributivo = probs[0] * 100
+                                    prob_subsidiado = probs[1] * 100
                                     
-                                    st.metric("Probabilidad Bajo Riesgo", f"{prob_low:.1f}%")
-                                    st.metric("Probabilidad Alto Riesgo", f"{prob_high:.1f}%")
+                                    # Métricas de probabilidad
+                                    prob_col1, prob_col2 = st.columns(2)
+                                    with prob_col1:
+                                        st.metric("Probabilidad Contributivo", f"{prob_contributivo:.1f}%")
+                                    with prob_col2:
+                                        st.metric("Probabilidad Subsidiado", f"{prob_subsidiado:.1f}%")
                                     
-                                    # Gráfico de probabilidades
-                                    fig, ax = plt.subplots(figsize=(8, 3))
-                                    bars = ax.bar(['Bajo Riesgo', 'Alto Riesgo'], [prob_low, prob_high], 
-                                                 color=['#4CAF50', '#F44336'])
-                                    ax.set_ylabel('Probabilidad (%)')
-                                    ax.set_ylim(0, 100)
-                                    
-                                    # Agregar valores en las barras
-                                    for bar, value in zip(bars, [prob_low, prob_high]):
-                                        height = bar.get_height()
-                                        ax.text(bar.get_x() + bar.get_width()/2., height + 1,
-                                                f'{value:.1f}%', ha='center', va='bottom')
-                                    
-                                    st.pyplot(fig)
+                                    # Gráfico de probabilidades interactivo
+                                    fig = go.Figure(data=[
+                                        go.Bar(name='Probabilidades', 
+                                              x=['Contributivo', 'Subsidiado'], 
+                                              y=[prob_contributivo, prob_subsidiado],
+                                              marker_color=['#4CAF50', '#F44336'])
+                                    ])
+                                    fig.update_layout(
+                                        title='Probabilidades de Clasificación',
+                                        yaxis_title='Probabilidad (%)',
+                                        yaxis_range=[0, 100]
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
                             
                             else:
-                                st.warning("No se pudo obtener una predicción válida")
+                                st.warning("⚠️ No se pudo obtener una predicción válida")
                         
                         with res_col2:
                             st.subheader("📋 Datos Ingresados")
-                            st.json(input_data)
+                            
+                            # Mostrar datos en formato más legible
+                            for key, value in input_data.items():
+                                st.write(f"**{key.replace('_', ' ').title()}:** {value}")
                             
                             # Opción para guardar la predicción
-                            if st.button("💾 Guardar Predicción"):
+                            if st.button("💾 Guardar Predicción en Sesión"):
                                 if 'saved_predictions' not in st.session_state:
                                     st.session_state.saved_predictions = []
                                 
@@ -487,7 +631,7 @@ elif app_mode == "🔮 Predicción Individual":
                                     'probabilities': result.get('probabilities', [None])[0] if 'probabilities' in result else None
                                 }
                                 st.session_state.saved_predictions.append(saved_pred)
-                                st.success("Predicción guardada en sesión")
+                                st.success("✅ Predicción guardada en sesión actual")
                     
                     else:
                         st.error(f"❌ Error en la API: {response.status_code}")
@@ -504,7 +648,7 @@ elif app_mode == "🔮 Predicción Individual":
                 except Exception as e:
                     st.error(f"❌ Error inesperado: {str(e)}")
 
-# Página de Predicción por Lotes
+# Página de Predicción por Lotes (manteniendo la estructura pero optimizada)
 elif app_mode == "📁 Predicción por Lotes":
     st.header("Predicción por Lotes")
     
@@ -521,23 +665,25 @@ elif app_mode == "📁 Predicción por Lotes":
     4. **Procesamiento**: Las predicciones se realizarán en lote y podrá descargar los resultados
     """)
     
-    # Plantilla de datos
-    with st.expander("📥 Descargar Plantilla de Datos"):
+    # Plantilla de datos mejorada
+    with st.expander("📥 Descargar Plantilla de Datos", expanded=True):
         template_data = pd.DataFrame({
-            'Genero': ['Masculino', 'Femenino'],
-            'Grupo_etario': ['19 a 45', '45 a 50'],
-            'Tipo_afiliado': ['COTIZANTE', 'BENEFICIARIO'],
-            'Departamento': ['BOGOTA D.C.', 'ANTIOQUIA'],
-            'Municipio': ['BOGOTA', 'MEDELLIN'],
-            'Zona': ['Urbana', 'Urbana'],
-            'Nivel_Sisben': ['1', '2']
+            'Genero': ['Masculino', 'Femenino', 'Masculino'],
+            'Grupo_etario': ['19 a 45', '45 a 50', '60 a 65'],
+            'Tipo_afiliado': ['COTIZANTE', 'BENEFICIARIO', 'CABEZA DE FAMILIA'],
+            'Departamento': ['BOGOTA D.C.', 'ANTIOQUIA', 'VALLE'],
+            'Municipio': ['BOGOTA', 'MEDELLIN', 'CALI'],
+            'Zona': ['Urbana', 'Urbana', 'Rural'],
+            'Nivel_Sisben': ['1', '2', 'NO APLICA'],
+            'Estado_afiliado': ['Activo', 'Activo', 'Inactivo'],
+            'Condicion_beneficiario': ['NO APLICA', 'ESTUDIANTE', 'NO APLICA']
         })
         
         csv = template_data.to_csv(index=False)
         st.download_button(
-            label="📋 Descargar Plantilla CSV",
+            label="📋 Descargar Plantilla CSV Completa",
             data=csv,
-            file_name="plantilla_datos_modelo.csv",
+            file_name="plantilla_datos_modelo_salud.csv",
             mime="text/csv",
             help="Use esta plantilla como referencia para preparar sus datos"
         )
@@ -556,21 +702,37 @@ elif app_mode == "📁 Predicción por Lotes":
             
             # Mostrar información del archivo
             st.subheader("📊 Información del Archivo")
-            col1, col2, col3 = st.columns(3)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.metric("Registros", f"{len(batch_data):,}")
+                st.metric("📈 Registros", f"{len(batch_data):,}")
             
             with col2:
-                st.metric("Columnas", len(batch_data.columns))
+                st.metric("📊 Columnas", len(batch_data.columns))
             
             with col3:
                 file_size = uploaded_file.size / 1024  # KB
-                st.metric("Tamaño", f"{file_size:.1f} KB")
+                st.metric("💾 Tamaño", f"{file_size:.1f} KB")
             
-            # Mostrar vista previa
-            st.subheader("👀 Vista Previa del Archivo")
-            st.dataframe(batch_data.head(10), use_container_width=True)
+            with col4:
+                null_count = batch_data.isnull().sum().sum()
+                st.metric("⚠️ Valores Nulos", null_count)
+            
+            # Mostrar vista previa con pestañas
+            tab1, tab2, tab3 = st.tabs(["👀 Vista Previa", "🔍 Estructura", "📝 Muestra Aleatoria"])
+            
+            with tab1:
+                st.dataframe(batch_data.head(10), use_container_width=True)
+            
+            with tab2:
+                st.write("**Tipos de datos:**")
+                dtype_info = batch_data.dtypes.reset_index()
+                dtype_info.columns = ['Columna', 'Tipo de Dato']
+                st.dataframe(dtype_info, use_container_width=True)
+            
+            with tab3:
+                sample_size = min(10, len(batch_data))
+                st.dataframe(batch_data.sample(sample_size), use_container_width=True)
             
             # Validar datos antes de procesar
             st.subheader("🔍 Validación de Datos")
@@ -580,453 +742,43 @@ elif app_mode == "📁 Predicción por Lotes":
             
             if missing_columns:
                 st.error(f"❌ Faltan columnas requeridas: {', '.join(missing_columns)}")
-                st.info("Por favor, asegúrese de que su archivo contenga todas las columnas necesarias")
+                st.info("""
+                **Columnas requeridas:**
+                - Genero
+                - Grupo_etario  
+                - Tipo_afiliado
+                - Departamento
+                - Municipio
+                - Zona
+                - Nivel_Sisben
+                """)
             else:
                 st.success("✅ Todas las columnas requeridas están presentes")
                 
-                # Mostrar resumen de datos
+                # Mostrar resumen de datos por columna
                 st.write("**Resumen por columna:**")
                 for col in required_columns:
                     unique_vals = batch_data[col].nunique()
-                    sample_vals = batch_data[col].head(3).tolist()
+                    sample_vals = batch_data[col].dropna().head(3).tolist()
                     st.write(f"- **{col}**: {unique_vals} valores únicos (ej: {', '.join(map(str, sample_vals))})")
             
             # Procesar predicción
             if st.button("🚀 Ejecutar Predicción por Lotes", type="primary", disabled=bool(missing_columns)):
                 with st.spinner(f"📊 Procesando {len(batch_data):,} registros..."):
                     try:
-                        # Convertir a formato JSON para la API - CORREGIDO
+                        # Convertir a formato JSON para la API
                         records = batch_data.to_dict('records')
+                        
+                        # Barra de progreso
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
                         
                         start_time = time.time()
                         response = requests.post(
                             f"{API_BASE_URL}/batch_predict",
-                            json={"records": records},  # CORREGIDO: Cambiado de "data" a "records"
-                            timeout=60
+                            json={"records": records},
+                            timeout=120  # Mayor timeout para lotes grandes
                         )
                         processing_time = (time.time() - start_time)
                         
-                        if response.status_code == 200:
-                            results = response.json()
-                            predictions = results.get('predictions', [])
-                            
-                            # Agregar predicciones al DataFrame
-                            batch_data['prediccion'] = predictions
-                            batch_data['prediccion_texto'] = batch_data['prediccion'].map({0: 'Bajo Riesgo', 1: 'Alto Riesgo'})
-                            
-                            # Agregar timestamp
-                            batch_data['fecha_procesamiento'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            
-                            st.success(f"✅ {len(predictions):,} predicciones completadas en {processing_time:.1f} segundos")
-                            
-                            # Mostrar resumen
-                            st.subheader("📈 Resumen de Predicciones")
-                            
-                            summary_col1, summary_col2, summary_col3, summary_col4 = st.columns(4)
-                            
-                            total = len(batch_data)
-                            alto_riesgo = batch_data['prediccion'].sum()
-                            bajo_riesgo = total - alto_riesgo
-                            tasa_alto_riesgo = (alto_riesgo / total) * 100
-                            
-                            with summary_col1:
-                                st.metric("Total Procesado", f"{total:,}")
-                            
-                            with summary_col2:
-                                st.metric("Alto Riesgo", f"{alto_riesgo:,}")
-                            
-                            with summary_col3:
-                                st.metric("Bajo Riesgo", f"{bajo_riesgo:,}")
-                            
-                            with summary_col4:
-                                st.metric("Tasa Alto Riesgo", f"{tasa_alto_riesgo:.1f}%")
-                            
-                            # Visualización rápida
-                            fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-                            
-                            # Gráfico de torta
-                            labels = ['Bajo Riesgo', 'Alto Riesgo']
-                            sizes = [bajo_riesgo, alto_riesgo]
-                            colors = ['#4CAF50', '#F44336']
-                            
-                            ax[0].pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
-                            ax[0].set_title('Distribución de Predicciones')
-                            
-                            # Gráfico de barras
-                            ax[1].bar(labels, sizes, color=colors)
-                            ax[1].set_title('Conteo de Predicciones')
-                            ax[1].set_ylabel('Número de Registros')
-                            
-                            for i, v in enumerate(sizes):
-                                ax[1].text(i, v + max(sizes)*0.01, f'{v:,}', ha='center')
-                            
-                            plt.tight_layout()
-                            st.pyplot(fig)
-                            
-                            # Mostrar resultados detallados
-                            st.subheader("📋 Resultados Detallados")
-                            st.dataframe(batch_data, use_container_width=True)
-                            
-                            # Descargar resultados
-                            st.subheader("💾 Descargar Resultados")
-                            
-                            output_col1, output_col2 = st.columns(2)
-                            
-                            with output_col1:
-                                # CSV
-                                csv = batch_data.to_csv(index=False)
-                                st.download_button(
-                                    label="📥 Descargar CSV Completo",
-                                    data=csv,
-                                    file_name=f"resultados_prediccion_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                                    mime="text/csv"
-                                )
-                            
-                            with output_col2:
-                                # Solo alto riesgo
-                                alto_riesgo_data = batch_data[batch_data['prediccion'] == 1]
-                                if not alto_riesgo_data.empty:
-                                    csv_alto = alto_riesgo_data.to_csv(index=False)
-                                    st.download_button(
-                                        label="📥 Descargar Solo Alto Riesgo",
-                                        data=csv_alto,
-                                        file_name=f"alto_riesgo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                                        mime="text/csv"
-                                    )
-                            
-                            # Guardar en session state para análisis
-                            st.session_state.batch_results = batch_data
-                            st.session_state.last_batch_file = uploaded_file.name
-                            
-                            # Resumen ejecutivo
-                            with st.expander("📊 Resumen Ejecutivo"):
-                                st.write(f"""
-                                **Resumen del Procesamiento por Lotes**
-                                
-                                - **Archivo procesado**: {uploaded_file.name}
-                                - **Total de registros**: {total:,}
-                                - **Registros de alto riesgo**: {alto_riesgo:,} ({tasa_alto_riesgo:.1f}%)
-                                - **Registros de bajo riesgo**: {bajo_riesgo:,} ({(100-tasa_alto_riesgo):.1f}%)
-                                - **Tiempo de procesamiento**: {processing_time:.1f} segundos
-                                - **Fecha y hora**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-                                """)
-                        
-                        else:
-                            st.error(f"❌ Error en la API: {response.status_code}")
-                            try:
-                                error_detail = response.json()
-                                st.write("Detalles del error:", error_detail)
-                            except:
-                                st.write("Respuesta:", response.text)
-                    
-                    except requests.exceptions.Timeout:
-                        st.error("⏰ Timeout - La API no respondió en 60 segundos")
-                    except Exception as e:
-                        st.error(f"❌ Error procesando el lote: {str(e)}")
-        
-        except Exception as e:
-            st.error(f"❌ Error leyendo el archivo: {str(e)}")
-            st.info("Asegúrese de que el archivo sea un CSV válido y esté correctamente formateado")
-
-# Página de Resultados (mantiene la misma estructura pero mejorada)
-elif app_mode == "📈 Resultados":
-    st.header("Análisis de Resultados")
-    
-    if 'batch_results' not in st.session_state:
-        st.info("""
-        ℹ️ **No hay resultados de predicción disponibles**
-        
-        Para ver análisis de resultados:
-        1. Vaya a **📁 Predicción por Lotes**
-        2. Suba un archivo CSV y procese las predicciones
-        3. Los resultados estarán disponibles para análisis en esta sección
-        """)
-        st.stop()
-    
-    results = st.session_state.batch_results
-    
-    # Estadísticas de resultados
-    st.subheader("📊 Estadísticas de Predicciones")
-    
-    total = len(results)
-    alto_riesgo = results['prediccion'].sum() if results['prediccion'].dtype != 'object' else len(results[results['prediccion'] == 1])
-    bajo_riesgo = total - alto_riesgo
-    tasa_alto_riesgo = (alto_riesgo / total) * 100
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Predicciones", f"{total:,}")
-    
-    with col2:
-        st.metric("Alto Riesgo", f"{alto_riesgo:,}")
-    
-    with col3:
-        st.metric("Bajo Riesgo", f"{bajo_riesgo:,}")
-    
-    with col4:
-        st.metric("Tasa Alto Riesgo", f"{tasa_alto_riesgo:.1f}%")
-    
-    # Visualizaciones mejoradas
-    st.subheader("📈 Visualizaciones de Resultados")
-    
-    viz_type = st.selectbox(
-        "Tipo de visualización:",
-        ["Distribución General", "Análisis por Característica", "Comparativa Detallada"]
-    )
-    
-    if viz_type == "Distribución General":
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Gráfico de torta mejorado
-            fig, ax = plt.subplots(figsize=(8, 8))
-            labels = ['Bajo Riesgo', 'Alto Riesgo']
-            sizes = [bajo_riesgo, alto_riesgo]
-            colors = ['#4CAF50', '#F44336']
-            explode = (0.05, 0.05)  # resaltar las porciones
-            
-            ax.pie(sizes, explode=explode, labels=labels, colors=colors, autopct='%1.1f%%',
-                  shadow=True, startangle=90)
-            ax.axis('equal')
-            ax.set_title('Distribución de Predicciones', fontsize=16, fontweight='bold')
-            st.pyplot(fig)
-        
-        with col2:
-            # Gráfico de barras horizontal
-            fig, ax = plt.subplots(figsize=(10, 4))
-            y_pos = np.arange(len(labels))
-            ax.barh(y_pos, sizes, color=colors)
-            ax.set_yticks(y_pos)
-            ax.set_yticklabels(labels)
-            ax.set_xlabel('Número de Registros')
-            ax.set_title('Conteo de Predicciones por Categoría')
-            
-            # Agregar valores en las barras
-            for i, v in enumerate(sizes):
-                ax.text(v + max(sizes)*0.01, i, f'{v:,}', va='center')
-            
-            st.pyplot(fig)
-    
-    elif viz_type == "Análisis por Característica":
-        # Seleccionar característica para análisis
-        available_features = [col for col in results.columns if col not in ['prediccion', 'prediccion_texto', 'fecha_procesamiento']]
-        
-        if available_features:
-            selected_feature = st.selectbox("Seleccione característica para análisis:", available_features)
-            
-            # Crosstab mejorado
-            crosstab = pd.crosstab(results[selected_feature], results['prediccion'], normalize='index') * 100
-            
-            fig, ax = plt.subplots(figsize=(12, 8))
-            crosstab.plot(kind='bar', ax=ax, color=['#4CAF50', '#F44336'])
-            ax.set_ylabel('Porcentaje (%)')
-            ax.set_title(f'Distribución de Predicciones por {selected_feature}', fontweight='bold')
-            ax.legend(['Bajo Riesgo', 'Alto Riesgo'])
-            plt.xticks(rotation=45, ha='right')
-            plt.tight_layout()
-            st.pyplot(fig)
-            
-            # Tabla detallada
-            st.subheader("📋 Tabla de Distribución")
-            count_table = pd.crosstab(results[selected_feature], results['prediccion'])
-            count_table['Total'] = count_table.sum(axis=1)
-            count_table['% Alto Riesgo'] = (count_table[1] / count_table['Total'] * 100).round(1)
-            st.dataframe(count_table.style.background_gradient(subset=['% Alto Riesgo'], cmap='Reds'))
-    
-    else:  # Comparativa Detallada
-        st.subheader("🔍 Análisis Comparativo Detallado")
-        
-        # Seleccionar dos características para comparar
-        available_features = [col for col in results.columns if col not in ['prediccion', 'prediccion_texto', 'fecha_procesamiento']]
-        
-        if len(available_features) >= 2:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                feature1 = st.selectbox("Primera característica:", available_features, key='feat1')
-            
-            with col2:
-                feature2 = st.selectbox("Segunda característica:", available_features, key='feat2')
-            
-            if feature1 != feature2:
-                # Heatmap de correlación
-                pivot_table = results.pivot_table(
-                    index=feature1, 
-                    columns=feature2, 
-                    values='prediccion', 
-                    aggfunc='mean'
-                ) * 100
-                
-                fig, ax = plt.subplots(figsize=(12, 8))
-                im = ax.imshow(pivot_table.values, cmap='Reds', aspect='auto')
-                
-                # Etiquetas
-                ax.set_xticks(np.arange(len(pivot_table.columns)))
-                ax.set_yticks(np.arange(len(pivot_table.index)))
-                ax.set_xticklabels(pivot_table.columns, rotation=45, ha='right')
-                ax.set_yticklabels(pivot_table.index)
-                ax.set_xlabel(feature2)
-                ax.set_ylabel(feature1)
-                ax.set_title(f'Porcentaje de Alto Riesgo por {feature1} y {feature2}')
-                
-                # Barra de color
-                cbar = plt.colorbar(im, ax=ax)
-                cbar.set_label('Porcentaje de Alto Riesgo (%)')
-                
-                # Texto en las celdas
-                for i in range(len(pivot_table.index)):
-                    for j in range(len(pivot_table.columns)):
-                        text = ax.text(j, i, f'{pivot_table.iloc[i, j]:.1f}%',
-                                      ha="center", va="center", color="black", fontweight='bold')
-                
-                st.pyplot(fig)
-
-# Página Acerca del Modelo (mejorada)
-elif app_mode == "ℹ️ Acerca del Modelo":
-    st.header("ℹ️ Información del Modelo")
-    
-    st.subheader("🎯 Descripción del Sistema")
-    st.markdown("""
-    Este sistema de clasificación utiliza **machine learning** para analizar datos del sistema de salud colombiano
-    y realizar predicciones basadas en características demográficas y de afiliación.
-    
-    ### Objetivos Principales
-    - 🔍 **Identificar** patrones en los datos de afiliación al sistema de salud
-    - 📈 **Clasificar** casos según nivel de riesgo
-    - 🎯 **Optimizar** la asignación de recursos en salud
-    - 📊 **Proporcionar** insights para la toma de decisiones
-    """)
-    
-    # Características técnicas en pestañas
-    tab1, tab2, tab3, tab4 = st.tabs(["🏗️ Arquitectura", "📈 Métricas", "🔧 Tecnologías", "👥 Desarrollo"])
-    
-    with tab1:
-        st.markdown("""
-        ### Arquitectura del Sistema
-        
-        ```mermaid
-        graph TD
-            A[Streamlit UI] --> B[Flask/FastAPI];
-            B --> C[Modelo ML];
-            C --> D[Base de Datos];
-            B --> E[Resultados];
-            E --> A;
-        ```
-        
-        **Componentes principales:**
-        - **Frontend**: Interfaz Streamlit para interacción con usuarios
-        - **Backend**: API REST con Flask/FastAPI para procesamiento
-        - **ML Engine**: Modelos de Scikit-learn/XGBoost
-        - **Data Layer**: Bases de datos BDUA y EPSS
-        """)
-    
-    with tab2:
-        st.markdown("""
-        ### Métricas de Rendimiento
-        
-        | Métrica | Valor | Descripción |
-        |---------|-------|-------------|
-        | Precisión | > 85% | Exactitud general del modelo |
-        | Recall | > 80% | Capacidad de detectar casos positivos |
-        | F1-Score | > 82% | Balance entre precisión y recall |
-        | AUC-ROC | > 0.88 | Capacidad de discriminación |
-        | Tiempo Inferencia | < 100ms | Velocidad de predicción |
-        
-        **Nota**: Las métricas pueden variar según los datos de entrada y configuración del modelo.
-        """)
-    
-    with tab3:
-        st.markdown("""
-        ### Stack Tecnológico
-        
-        **Machine Learning & Data Science**
-        - Scikit-learn
-        - XGBoost
-        - Pandas / NumPy
-        - Joblib (serialización)
-        
-        **Backend & API**
-        - Flask / FastAPI
-        - REST API design
-        - JSON serialization
-        
-        **Frontend & UI**
-        - Streamlit
-        - Matplotlib / Seaborn
-        - Plotly (visualizaciones)
-        
-        **Despliegue & Infraestructura**
-        - Docker (containerización)
-        - Streamlit Sharing
-        - Python 3.8+
-        """)
-    
-    with tab4:
-        st.markdown("""
-        ### Información de Desarrollo
-        
-        **Equipo de Desarrollo**
-        - **Líder de Proyecto**: Equipo de Ciencia de Datos
-        - **Desarrolladores Backend**: Especialistas en ML y APIs
-        - **Desarrolladores Frontend**: Especialistas en UI/UX
-        - **Analistas de Datos**: Expertos en dominio de salud
-        
-        **Detalles del Proyecto**
-        - **Versión**: 1.0.0
-        - **Última actualización**: Julio 2025
-        - **Licencia**: Creative Commons Attribution Share Alike 4.0 International
-        - **Repositorio**: [Enlace al repositorio]()
-        
-        **Ciclo de Desarrollo**
-        - 📋 **Análisis de Requerimientos**
-        - 🏗️ **Diseño de Arquitectura**
-        - 🔧 **Desarrollo del Modelo**
-        - 🧪 **Validación y Testing**
-        - 🚀 **Despliegue y Monitoreo**
-        """)
-    
-    # Endpoints de la API
-    st.subheader("🌐 Endpoints de la API")
-    
-    if api_healthy:
-        try:
-            response = requests.get(f"{API_BASE_URL}")
-            endpoints = response.json().get('endpoints', {})
-            
-            for endpoint, description in endpoints.items():
-                st.code(f"{endpoint}: {description}", language='http')
-        except:
-            st.info("No se pudieron cargar los endpoints de la API")
-    else:
-        st.info("La API no está disponible para mostrar endpoints")
-        
-        # Mostrar endpoints esperados
-        st.markdown("""
-        **Endpoints esperados cuando la API esté disponible:**
-        ```
-        GET  /          - Información general de la API
-        GET  /health    - Estado del servicio y modelo
-        POST /predict   - Predicciones individuales
-        POST /batch_predict - Predicciones por lotes
-        ```
-        """)
-
-# Footer mejorado
-st.markdown("---")
-footer_col1, footer_col2, footer_col3 = st.columns([2, 1, 1])
-
-with footer_col1:
-    st.markdown(
-        "**Sistema de Clasificación - Modelo de Salud Colombia** | "
-        "Desarrollado con Streamlit 🚀"
-    )
-
-with footer_col2:
-    if api_healthy:
-        st.markdown(f"🟢 API: {API_BASE_URL}")
-    else:
-        st.markdown(f"🔴 API: {API_BASE_URL}")
-
-with footer_col3:
-    st.markdown(f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                        progress_bar.progress(100
