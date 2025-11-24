@@ -488,18 +488,3 @@ st.markdown(
     "**Sistema de Clasificación - Modelo de Salud Colombia** | "
     "Desarrollado con Streamlit 🚀"
 )
-
-# 1. Eliminar la conexión actual
-git remote remove origin
-
-# 2. Conectar con TU repositorio
-git remote add origin https://github.com/AnnaKatalina/Salud.git
-
-# 3. Agregar TODOS tus archivos
-git add .
-
-# 4. Hacer commit
-git commit -m "Aplicación completa de clasificación de salud"
-
-# 5. Forzar el push (sobrescribir)
-git push -f origin main
